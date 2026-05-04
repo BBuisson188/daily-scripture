@@ -206,7 +206,7 @@ function renderToday() {
             ? `<label class="new-person-field">
                 <span>New Person</span>
                 <div class="field-wrap">
-                  <input name="readerName" value="${escapeHtml(state.readerName)}" placeholder="e.g., Sarah" autocomplete="off" />
+                  <input name="readerName" value="${escapeHtml(state.readerName)}" placeholder="e.g., Tom B." autocomplete="off" />
                 </div>
               </label>`
             : ''
@@ -216,7 +216,7 @@ function renderToday() {
           <span>Scripture</span>
           <div class="field-wrap tall">
             <textarea name="passage" rows="3" placeholder="Enter a scripture...">${escapeHtml(state.passageText)}</textarea>
-            <small>e.g., John 3:16</small>
+            <small>e.g., John 3:16-4:5</small>
           </div>
         </label>
 
@@ -290,7 +290,7 @@ function renderScoreboard() {
     <section class="scoreboard" id="scoreboard">
       <div class="section-heading">
         <p class="eyebrow">Scoreboard</p>
-        <h2>Faithful little streaks</h2>
+        <h2>Iron Sharpens Iron</h2>
       </div>
       <div class="stats-strip">
         <div><span>${average(allEntries.map((entry) => entry.verseCount)).toFixed(1)}</span><p>Avg group verses</p></div>
