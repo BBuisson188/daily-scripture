@@ -204,7 +204,7 @@ function renderToday() {
         ${
           isNewPerson
             ? `<label class="new-person-field">
-                <span>New Person</span>
+                <span>Your Name (for future tracking)</span>
                 <div class="field-wrap">
                   <input name="readerName" value="${escapeHtml(state.readerName)}" placeholder="e.g., Tom B." autocomplete="off" />
                 </div>
@@ -351,12 +351,31 @@ function render() {
 }
 
 function bindEvents() {
+  app.querySelector('[data-refresh]')?.addEventListener('click', () => {
+    state.data = readLocal();
+    render();
+  });
+
   app.querySelectorAll('[data-tab]').forEach((button) => {
     button.addEventListener('click', () => {
       state.activeTab = button.dataset.tab;
       state.error = '';
       render();
     });
+  });
+
+  app.querySelector('[data-add-person]')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const name = new FormData(event.currentTarget).get('name').trim();
+    if (!name) return;
+    const group = currentGroup();
+    const person = { id: `person-${crypto.randomUUID()}`, groupId: group.id, name, active: true };
+    state.data.people.push(person);
+    state.selectedPersonId = person.id;
+    localStorage.setItem(savedPersonKey(group.id), person.id);
+    writeLocal(state.data);
+    syncFormFromSelection();
+    render();
   });
 
   app.querySelectorAll('[data-day]').forEach((button) => {
