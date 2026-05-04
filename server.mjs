@@ -1,38 +1,44 @@
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
+import { readFile } from 'node:fs/promises';
 
-const root = process.cwd();
-const port = 5173;
+const PORT = Number(process.env.PORT || 5173);
+const ROOT = process.cwd();
 
-const types = {
+const contentTypes = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml; charset=utf-8',
   '.png': 'image/png',
-  '.json': 'application/json; charset=utf-8',
+  '.ico': 'image/x-icon',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
 };
 
-createServer(async (request, response) => {
+const server = createServer(async (req, res) => {
   try {
-    const url = new URL(request.url, `http://127.0.0.1:${port}`);
-    const requested = url.pathname === '/' || url.pathname.startsWith('/g/') ? '/index.html' : url.pathname;
-    const filePath = normalize(join(root, requested));
+    const url = new URL(req.url || '/', `http://${req.headers.host}`);
+    const pathname = url.pathname === '/' ? '/index.html' : url.pathname;
+    const safePath = normalize(decodeURIComponent(pathname)).replace(/^([/\\])+/, '');
+    const filePath = join(ROOT, safePath);
 
-    if (!filePath.startsWith(root)) {
-      response.writeHead(403);
-      response.end('Forbidden');
+    if (!filePath.startsWith(ROOT)) {
+      res.writeHead(403);
+      res.end('Forbidden');
       return;
     }
 
-    const content = await readFile(filePath);
-    response.writeHead(200, { 'Content-Type': types[extname(filePath)] || 'application/octet-stream' });
-    response.end(content);
-  } catch {
-    response.writeHead(404);
-    response.end('Not found');
+    const data = await readFile(filePath);
+    const type = contentTypes[extname(filePath)] || 'application/octet-stream';
+    res.writeHead(200, { 'Content-Type': type });
+    res.end(data);
+  } catch (error) {
+    res.writeHead(404);
+    res.end('Not found');
   }
-}).listen(port, '127.0.0.1', () => {
-  console.log(`Daily Scripture running at http://127.0.0.1:${port}`);
+});
+
+server.listen(PORT, () => {
+  console.log(`Daily Scripture running at http://localhost:${PORT}`);
 });
