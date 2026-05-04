@@ -1,0 +1,24 @@
+{
+  "name": "Daily Scripture",
+  "short_name": "Scripture",
+  "description": "Track daily scripture readings and takeaways with your small group.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#d6cebd",
+  "theme_color": "#d6cebd",
+  "icons": [
+    {
+      "src": "png-icon/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "png-icon/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
