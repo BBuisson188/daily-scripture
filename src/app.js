@@ -340,9 +340,9 @@ function render() {
       </section>
 
       <nav class="bottom-nav" aria-label="Primary">
-        <button class="${state.activeTab === 'today' ? 'active' : ''}" type="button" data-tab="today"><img class="nav-icon" src="src/assets/icons/today.svg?v=2" alt="" aria-hidden="true" /><span>Today</span></button>
-        <button class="${state.activeTab === 'entries' ? 'active' : ''}" type="button" data-tab="entries"><img class="nav-icon" src="src/assets/icons/entries.svg?v=2" alt="" aria-hidden="true" /><span>Entries</span></button>
-        <button class="${state.activeTab === 'scoreboard' ? 'active' : ''}" type="button" data-tab="scoreboard"><img class="nav-icon" src="src/assets/icons/scoreboard.svg?v=2" alt="" aria-hidden="true" /><span>Scoreboard</span></button>
+        <button class="${state.activeTab === 'today' ? 'active' : ''}" type="button" data-tab="today"><img class="nav-icon" src="src/assets/icons/today.svg?v=3" alt="" aria-hidden="true" /><span>Today</span></button>
+        <button class="${state.activeTab === 'entries' ? 'active' : ''}" type="button" data-tab="entries"><img class="nav-icon" src="src/assets/icons/entries.svg?v=3" alt="" aria-hidden="true" /><span>Entries</span></button>
+        <button class="${state.activeTab === 'scoreboard' ? 'active' : ''}" type="button" data-tab="scoreboard"><img class="nav-icon" src="src/assets/icons/scoreboard.svg?v=3" alt="" aria-hidden="true" /><span>Scoreboard</span></button>
       </nav>
     </main>
   `;
