@@ -1,0 +1,13 @@
+{
+  "name": "daily-scripture",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server.mjs",
+    "build": "node --check src/app.js && node --check src/passageParser.js && node --check src/bibleData.js",
+    "preview": "node server.mjs"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
