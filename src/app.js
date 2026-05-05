@@ -1,5 +1,5 @@
-import { createSyncStore } from './syncStore.js?v=2';
-import { bibleGatewayUrl, getPassageSuggestions, parsePassage } from './passageParser.js?v=2';
+import { createSyncStore } from './syncStore.js?v=4';
+import { bibleGatewayUrl, getPassageSuggestions, parsePassage } from './passageParser.js?v=4';
 
 const localKey = 'daily-scripture-local-v1';
 const defaultGroupSlug = 'main';
