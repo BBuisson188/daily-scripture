@@ -24,6 +24,41 @@ async function requestJson(url, options = {}) {
   return response.json();
 }
 
+function itemStamp(item) {
+  return Date.parse(item?.updatedAt || item?.createdAt || 0) || 0;
+}
+
+function mergeList(remoteItems = [], localItems = []) {
+  const merged = new Map();
+
+  for (const item of [...remoteItems, ...localItems]) {
+    if (!item?.id) continue;
+    const existing = merged.get(item.id);
+    if (!existing || itemStamp(item) >= itemStamp(existing)) {
+      merged.set(item.id, { ...existing, ...item });
+    }
+  }
+
+  return [...merged.values()];
+}
+
+function mergeSnapshots(remote, local) {
+  if (!remote) return local;
+  if (!local) return remote;
+
+  return {
+    name: local.name || remote.name,
+    slug: local.slug || remote.slug,
+    updatedAt: new Date(Math.max(itemStamp(remote), itemStamp(local), Date.now())).toISOString(),
+    people: mergeList(remote.people, local.people),
+    entries: mergeList(remote.entries, local.entries),
+  };
+}
+
+function sameSnapshot(a, b) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 export function createSyncStore({ getGroup, getPeople, getEntries, replaceGroupData, onStatus, onRemoteChange }) {
   const url = groupUrl(getGroup().slug);
   let remoteUpdatedAt = '';
@@ -49,16 +84,27 @@ export function createSyncStore({ getGroup, getPeople, getEntries, replaceGroupD
   async function loadRemote({ render = true } = {}) {
     if (!url || saving) return;
     try {
+      const local = snapshot();
       const remote = await requestJson(url);
-      if (remote?.updatedAt && remote.updatedAt !== remoteUpdatedAt) {
-        remoteUpdatedAt = remote.updatedAt;
-        replaceGroupData(remote);
+      if (!remote) {
+        await save();
+        ready = true;
+        return;
+      }
+
+      const merged = mergeSnapshots(remote, local);
+      if (!sameSnapshot(merged, local)) {
+        replaceGroupData(merged);
         status({ mode: 'online', message: 'Synced' });
         if (render) onRemoteChange?.();
       }
-      if (!remote) {
-        await save();
+      if (!sameSnapshot(merged, remote)) {
+        await requestJson(url, {
+          method: 'PUT',
+          body: JSON.stringify(merged),
+        });
       }
+      remoteUpdatedAt = merged.updatedAt;
       ready = true;
     } catch (error) {
       status({ mode: 'offline', message: 'Sync paused' });
@@ -70,7 +116,9 @@ export function createSyncStore({ getGroup, getPeople, getEntries, replaceGroupD
     saving = true;
     status({ mode: 'saving', message: 'Saving online...' });
     try {
-      const data = snapshot();
+      const local = snapshot();
+      const remote = await requestJson(url).catch(() => null);
+      const data = mergeSnapshots(remote, local);
       await requestJson(url, {
         method: 'PUT',
         body: JSON.stringify(data),
