@@ -127,14 +127,14 @@ export function createSyncStore({ getGroup, getPeople, getEntries, replaceGroupD
     }
   }
 
-  async function save() {
+  async function save({ merge = true } = {}) {
     if (!url) return;
     saving = true;
     status({ mode: 'saving', message: 'Saving online...' });
     try {
       const local = snapshot();
-      const remote = await requestJson(url).catch(() => null);
-      const data = mergeSnapshots(remote, local);
+      const remote = merge ? await requestJson(url).catch(() => null) : null;
+      const data = merge ? mergeSnapshots(remote, local) : local;
       await requestJson(url, {
         method: 'PUT',
         body: JSON.stringify(data),
