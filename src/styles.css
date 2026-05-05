@@ -61,13 +61,48 @@ button {
   gap: 16px;
 }
 
+.top-actions {
+  min-height: 34px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin: 0 4px 10px;
+}
+
+.undo-button {
+  width: 34px;
+  height: 34px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(16, 43, 37, 0.12);
+  border-radius: 999px;
+  color: var(--green);
+  background: rgba(255, 253, 248, 0.82);
+  box-shadow: 0 8px 18px rgba(35, 45, 39, 0.08);
+}
+
+.undo-button svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.undo-button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
 .sync-status {
   width: max-content;
   max-width: 100%;
   min-height: 26px;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  margin: 0 0 10px 4px;
   padding: 0 10px;
   border: 1px solid rgba(16, 43, 37, 0.12);
   border-radius: 999px;
@@ -75,6 +110,15 @@ button {
   background: rgba(255, 253, 248, 0.78);
   font-size: 0.76rem;
   font-weight: 800;
+  opacity: 0;
+  transform: translateY(-3px);
+  pointer-events: none;
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.sync-status.visible {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .sync-status.online {
