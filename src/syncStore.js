@@ -39,7 +39,7 @@ function mergeList(remoteItems = [], localItems = []) {
     }
   }
 
-  return [...merged.values()];
+  return [...merged.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
 }
 
 function mergeSnapshots(remote, local) {
@@ -56,7 +56,18 @@ function mergeSnapshots(remote, local) {
 }
 
 function sameSnapshot(a, b) {
-  return JSON.stringify(a) === JSON.stringify(b);
+  if (!a || !b) return a === b;
+  return JSON.stringify({
+    name: a.name || '',
+    slug: a.slug || '',
+    people: a.people || [],
+    entries: a.entries || [],
+  }) === JSON.stringify({
+    name: b.name || '',
+    slug: b.slug || '',
+    people: b.people || [],
+    entries: b.entries || [],
+  });
 }
 
 export function createSyncStore({ getGroup, getPeople, getEntries, replaceGroupData, onStatus, onRemoteChange }) {
@@ -72,12 +83,20 @@ export function createSyncStore({ getGroup, getPeople, getEntries, replaceGroupD
 
   function snapshot() {
     const group = getGroup();
+    const people = getPeople().map((person) => ({ ...person })).sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    const entries = getEntries().map((entry) => ({ ...entry })).sort((a, b) => String(a.id).localeCompare(String(b.id)));
     return {
       name: group.name,
       slug: group.slug,
-      updatedAt: new Date().toISOString(),
-      people: getPeople().map((person) => ({ ...person })),
-      entries: getEntries().map((entry) => ({ ...entry })),
+      updatedAt: new Date(
+        Math.max(
+          Date.now(),
+          ...people.map(itemStamp),
+          ...entries.map(itemStamp),
+        ),
+      ).toISOString(),
+      people,
+      entries,
     };
   }
 
