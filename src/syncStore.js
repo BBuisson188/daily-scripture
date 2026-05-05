@@ -1,7 +1,5 @@
 import { firebaseDatabaseUrl } from './firebaseConfig.js';
 
-const pollMs = 7000;
-
 function cleanDatabaseUrl(url) {
   return String(url || '').trim().replace(/\/+$/, '');
 }
@@ -73,7 +71,6 @@ function sameSnapshot(a, b) {
 export function createSyncStore({ getGroup, getPeople, getEntries, replaceGroupData, onStatus, onRemoteChange }) {
   const url = groupUrl(getGroup().slug);
   let remoteUpdatedAt = '';
-  let pollId = 0;
   let saving = false;
   let ready = false;
 
@@ -156,13 +153,12 @@ export function createSyncStore({ getGroup, getPeople, getEntries, replaceGroupD
       status({ mode: 'local', message: 'Local only' });
       return;
     }
-    status({ mode: 'saving', message: 'Connecting...' });
-    await loadRemote();
-    pollId = window.setInterval(() => loadRemote(), pollMs);
+    ready = true;
+    status({ mode: 'online', message: 'Online' });
   }
 
   function stop() {
-    if (pollId) window.clearInterval(pollId);
+    ready = false;
   }
 
   return {
