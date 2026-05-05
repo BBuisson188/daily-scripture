@@ -6,7 +6,9 @@ const bookPattern = books
   .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'))
   .join('|');
 
-const passageRegex = new RegExp(`\\b(${bookPattern})\\.?\\s+(\\d{1,3})(?::(\\d{1,3}))?(?:\\s*-\\s*(?:(\\d{1,3}):)?(\\d{1,3}))?`, 'gi');
+const passageRegex = new RegExp(`\\b(${bookPattern})\\.?\\s*(\\d{1,3})(?::(\\d{1,3}))?(?:\\s*-\\s*(?:(\\d{1,3}):)?(\\d{1,3}))?`, 'gi');
+
+const normalizeText = (value) => String(value || '').toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ').trim();
 
 function countRange(book, startChapter, startVerse, endChapter, endVerse) {
   if (!book) return null;
@@ -103,4 +105,35 @@ export function bibleGatewayUrl(range) {
   if (!range) return null;
   const passage = `${range.book} ${range.startChapter}:${range.startVerse}-${range.endChapter}:${range.endVerse}`;
   return `https://www.biblegateway.com/passage/?search=${encodeURIComponent(passage)}&version=WEB`;
+}
+
+export function getPassageSuggestions(input) {
+  const text = input.trim();
+  const numberMatch = text.match(/\d/);
+  if (!text || !numberMatch) return [];
+
+  const bookText = normalizeText(text.slice(0, numberMatch.index));
+  const referenceText = text.slice(numberMatch.index).trim();
+  if (!bookText || !referenceText) return [];
+
+  return books
+    .map((book) => {
+      const names = [book.name, ...book.aliases].map(normalizeText);
+      const score = names.reduce((best, name) => {
+        if (name === bookText) return Math.max(best, 100);
+        if (name.startsWith(bookText)) return Math.max(best, 80 - Math.abs(name.length - bookText.length));
+        if (bookText.startsWith(name)) return Math.max(best, 70 - Math.abs(name.length - bookText.length));
+        if (name.includes(bookText) || bookText.includes(name)) return Math.max(best, 45);
+        return best;
+      }, 0);
+      const passage = `${book.name} ${referenceText}`;
+      return { book, score, passage, parsed: parsePassage(passage) };
+    })
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score || a.book.name.localeCompare(b.book.name))
+    .slice(0, 4)
+    .map((item) => ({
+      label: item.parsed.status === 'parsed' ? item.parsed.normalized : item.passage,
+      value: item.passage,
+    }));
 }
