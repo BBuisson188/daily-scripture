@@ -52,9 +52,11 @@ function parseMatch(match) {
   const label =
     startChapter === endChapter && startVerse === 1 && endVerse === verseCountForChapter(book.name, startChapter)
       ? `${book.name} ${startChapter}`
-      : startChapter === endChapter
-        ? `${book.name} ${startChapter}:${startVerse}-${endVerse}`
-        : `${book.name} ${startChapter}:${startVerse}-${endChapter}:${endVerse}`;
+      : startChapter === endChapter && startVerse === endVerse
+        ? `${book.name} ${startChapter}:${startVerse}`
+        : startChapter === endChapter
+          ? `${book.name} ${startChapter}:${startVerse}-${endVerse}`
+          : `${book.name} ${startChapter}:${startVerse}-${endChapter}:${endVerse}`;
 
   return {
     book: book.name,
