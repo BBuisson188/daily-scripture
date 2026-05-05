@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node server.mjs",
-    "build": "node --check src/app.js && node --check src/passageParser.js && node --check src/bibleData.js",
+    "build": "node --check src/app.js && node --check src/passageParser.js && node --check src/bibleData.js && node --check src/syncStore.js && node --check src/firebaseConfig.js",
     "preview": "node server.mjs"
   },
   "dependencies": {},
