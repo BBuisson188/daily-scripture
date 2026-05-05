@@ -1,4 +1,4 @@
-import { books, findBook, verseCountForChapter } from './bibleData.js';
+import { books, findBook, verseCountForChapter } from './bibleData.js?v=2';
 
 const bookPattern = books
   .flatMap((book) => [book.name, ...book.aliases])
