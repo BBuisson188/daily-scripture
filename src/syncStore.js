@@ -90,7 +90,7 @@ export function createSyncStore({ getGroup, getPeople, getEntries, replaceGroupD
       return;
     }
     status({ mode: 'saving', message: 'Connecting...' });
-    await loadRemote({ render: false });
+    await loadRemote();
     pollId = window.setInterval(() => loadRemote(), pollMs);
   }
 
