@@ -16,10 +16,13 @@ const state = {
   error: '',
   activeTab: 'today',
   syncStatus: { mode: 'local', message: 'Local only' },
+  syncStatusVisible: false,
 };
 
 const newPersonValue = '__new_person__';
 let syncStore = null;
+let undoSnapshot = null;
+let syncStatusTimer = 0;
 
 function readLocal() {
   const raw = localStorage.getItem(localKey);
@@ -37,6 +40,18 @@ function writeLocal(data) {
   localStorage.setItem(localKey, JSON.stringify(data));
 }
 
+function cloneData(data) {
+  return JSON.parse(JSON.stringify(data));
+}
+
+function rememberUndo() {
+  undoSnapshot = cloneData(state.data);
+}
+
+function hasUndo() {
+  return Boolean(undoSnapshot);
+}
+
 function saveData({ remote = true } = {}) {
   writeLocal(state.data);
   if (remote) syncStore?.save();
@@ -50,6 +65,7 @@ function currentGroup() {
   const slug = groupSlug();
   let group = state.data.groups.find((item) => item.slug === slug);
   if (!group) {
+    rememberUndo();
     group = { id: `group-${crypto.randomUUID()}`, slug, name: titleFromSlug(slug) };
     state.data.groups.push(group);
     saveData();
@@ -394,7 +410,15 @@ function render() {
       </section>
 
       <section class="content-panel">
-        <div class="sync-status ${escapeHtml(state.syncStatus.mode)}">${escapeHtml(state.syncStatus.message)}</div>
+        <div class="top-actions">
+          <button class="undo-button" type="button" title="Undo last change" aria-label="Undo last change" data-undo ${hasUndo() ? '' : 'disabled'}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 7H5v4" />
+              <path d="M5.8 10.3A7 7 0 1 0 8 5.5" />
+            </svg>
+          </button>
+          <div class="sync-status ${escapeHtml(state.syncStatus.mode)} ${state.syncStatusVisible ? 'visible' : ''}" aria-live="polite">${escapeHtml(state.syncStatus.message)}</div>
+        </div>
         ${state.activeTab === 'today' ? renderToday() : ''}
         ${state.activeTab === 'entries' ? renderEntriesTab() : ''}
         ${state.activeTab === 'scoreboard' ? renderScoreboard() : ''}
@@ -426,6 +450,16 @@ function bindPassageSuggestions() {
 }
 
 function bindEvents() {
+  app.querySelector('[data-undo]')?.addEventListener('click', () => {
+    if (!undoSnapshot) return;
+    state.data = undoSnapshot;
+    undoSnapshot = null;
+    writeLocal(state.data);
+    syncStore?.save();
+    syncFormFromSelection();
+    render();
+  });
+
   app.querySelector('[data-refresh]')?.addEventListener('click', () => {
     state.data = readLocal();
     render();
@@ -444,6 +478,7 @@ function bindEvents() {
     const name = new FormData(event.currentTarget).get('name').trim();
     if (!name) return;
     const group = currentGroup();
+    rememberUndo();
     const person = { id: `person-${crypto.randomUUID()}`, groupId: group.id, name, active: true };
     state.data.people.push(person);
     state.selectedPersonId = person.id;
@@ -523,6 +558,7 @@ function bindEvents() {
       updatedAt: new Date().toISOString(),
     };
     const existing = state.data.entries.find((entry) => entry.groupId === group.id && entry.id === payload.id);
+    rememberUndo();
     if (existing) Object.assign(existing, payload);
     else state.data.entries.push({ ...payload, createdAt: new Date().toISOString() });
 
@@ -534,6 +570,29 @@ function bindEvents() {
   bindPassageSuggestions();
 }
 
+function updateSyncStatus() {
+  const status = app.querySelector('.sync-status');
+  if (status) {
+    status.replaceChildren(document.createTextNode(state.syncStatus.message));
+    status.className = `sync-status ${state.syncStatus.mode} ${state.syncStatusVisible ? 'visible' : ''}`;
+  }
+  const undoButton = app.querySelector('[data-undo]');
+  if (undoButton) undoButton.toggleAttribute('disabled', !hasUndo());
+}
+
+function showSyncStatus(syncStatus) {
+  state.syncStatus = syncStatus;
+  state.syncStatusVisible = syncStatus.message !== 'Online';
+  window.clearTimeout(syncStatusTimer);
+  updateSyncStatus();
+  if (state.syncStatusVisible && syncStatus.mode !== 'saving') {
+    syncStatusTimer = window.setTimeout(() => {
+      state.syncStatusVisible = false;
+      updateSyncStatus();
+    }, 5000);
+  }
+}
+
 function startSync() {
   syncStore = createSyncStore({
     getGroup: currentGroup,
@@ -541,10 +600,7 @@ function startSync() {
     getEntries: entries,
     replaceGroupData,
     onStatus: (syncStatus) => {
-      state.syncStatus = syncStatus;
-      app.querySelector('.sync-status')?.replaceChildren(document.createTextNode(syncStatus.message));
-      const status = app.querySelector('.sync-status');
-      if (status) status.className = `sync-status ${syncStatus.mode}`;
+      showSyncStatus(syncStatus);
     },
     onRemoteChange: render,
   });
