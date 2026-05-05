@@ -1,4 +1,5 @@
-import { bibleGatewayUrl, parsePassage } from './passageParser.js';
+import { createSyncStore } from './syncStore.js';
+import { bibleGatewayUrl, getPassageSuggestions, parsePassage } from './passageParser.js';
 
 const localKey = 'daily-scripture-local-v1';
 const defaultGroupSlug = 'main';
@@ -14,9 +15,11 @@ const state = {
   takeaway: '',
   error: '',
   activeTab: 'today',
+  syncStatus: { mode: 'local', message: 'Local only' },
 };
 
 const newPersonValue = '__new_person__';
+let syncStore = null;
 
 function readLocal() {
   const raw = localStorage.getItem(localKey);
@@ -34,6 +37,11 @@ function writeLocal(data) {
   localStorage.setItem(localKey, JSON.stringify(data));
 }
 
+function saveData({ remote = true } = {}) {
+  writeLocal(state.data);
+  if (remote) syncStore?.save();
+}
+
 function groupSlug() {
   return window.location.pathname.match(/\/g\/([^/]+)/)?.[1] || defaultGroupSlug;
 }
@@ -44,7 +52,7 @@ function currentGroup() {
   if (!group) {
     group = { id: `group-${crypto.randomUUID()}`, slug, name: titleFromSlug(slug) };
     state.data.groups.push(group);
-    writeLocal(state.data);
+    saveData();
   }
   return group;
 }
@@ -100,6 +108,22 @@ function entries() {
   return state.data.entries.filter((entry) => entry.groupId === group.id);
 }
 
+function replaceGroupData(remote) {
+  const group = currentGroup();
+  const peopleForGroup = Array.isArray(remote?.people) ? remote.people : [];
+  const entriesForGroup = Array.isArray(remote?.entries) ? remote.entries : [];
+
+  state.data.people = [
+    ...state.data.people.filter((person) => person.groupId !== group.id),
+    ...peopleForGroup.map((person) => ({ ...person, groupId: group.id })),
+  ];
+  state.data.entries = [
+    ...state.data.entries.filter((entry) => entry.groupId !== group.id),
+    ...entriesForGroup.map((entry) => ({ ...entry, groupId: group.id })),
+  ];
+  saveData({ remote: false });
+}
+
 function selectedPerson() {
   return people().find((person) => person.id === state.selectedPersonId);
 }
@@ -115,13 +139,21 @@ function average(values) {
 
 function dailyStreak(personId) {
   const dates = new Set(entries().filter((entry) => entry.personId === personId).map((entry) => entry.entryDate));
-  let cursor = isoDate(new Date());
+  const today = isoDate(new Date());
+  const yesterday = shiftDate(today, -1);
+  let cursor = dates.has(today) ? today : dates.has(yesterday) ? yesterday : '';
+  if (!cursor) return 0;
   let streak = 0;
   while (dates.has(cursor)) {
     streak += 1;
     cursor = shiftDate(cursor, -1);
   }
   return streak;
+}
+
+function formatStreak(value, unit) {
+  if (!value) return '';
+  return `${value} ${unit}${value === 1 ? '' : 's'} streak`;
 }
 
 function weeklyStreak(personId) {
@@ -183,6 +215,35 @@ function renderEntry(entry) {
   `;
 }
 
+function renderPassageFeedback(passage, suggestions = getPassageSuggestions(state.passageText)) {
+  if (passage.status === 'parsed') {
+    return `${escapeHtml(passage.normalized)} &bull; ${passage.verseCount} verses`;
+  }
+  if (suggestions.length) {
+    return `
+      <span>${escapeHtml(passage.message || 'Did you mean one of these?')}</span>
+      <div class="suggestion-list">
+        ${suggestions.map((suggestion) => `<button type="button" data-passage-suggestion="${escapeHtml(suggestion.value)}">${escapeHtml(suggestion.label)}</button>`).join('')}
+      </div>
+    `;
+  }
+  return escapeHtml(passage.message || 'Verse count will appear here');
+}
+
+function updatePassageFeedback() {
+  const passage = parsePassage(state.passageText);
+  const note = app.querySelector('[data-passage-feedback]');
+  if (!note) return;
+  note.className = passage.status === 'unknown' ? 'parse-note warning' : 'parse-note';
+  note.innerHTML = renderPassageFeedback(passage);
+  bindPassageSuggestions();
+}
+
+function updateTakeawayCount() {
+  const counter = app.querySelector('[data-takeaway-count]');
+  if (counter) counter.textContent = `${state.takeaway.trim().length} characters`;
+}
+
 function renderToday() {
   const passage = parsePassage(state.passageText);
   const knownPeople = people();
@@ -220,12 +281,8 @@ function renderToday() {
           </div>
         </label>
 
-        <div class="${passage.status === 'unknown' ? 'parse-note warning' : 'parse-note'}">
-          ${
-            passage.status === 'parsed'
-              ? `${escapeHtml(passage.normalized)} &bull; ${passage.verseCount} verses`
-              : escapeHtml(passage.message || 'Verse count will appear here')
-          }
+        <div class="${passage.status === 'unknown' ? 'parse-note warning' : 'parse-note'}" data-passage-feedback>
+          ${renderPassageFeedback(passage)}
         </div>
 
         <label>
@@ -236,7 +293,7 @@ function renderToday() {
         </label>
 
         <div class="form-meta">
-          <span>${state.takeaway.trim().length} characters</span>
+          <span data-takeaway-count>${state.takeaway.trim().length} characters</span>
           <span>${selectedEntry() ? 'Editing today' : 'New entry'}</span>
         </div>
 
@@ -293,8 +350,8 @@ function renderScoreboard() {
         <h2>Iron Sharpens Iron</h2>
       </div>
       <div class="stats-strip">
-        <div><span>${average(allEntries.map((entry) => entry.verseCount)).toFixed(1)}</span><p>Avg group verses</p></div>
-        <div><span>${average(allEntries.map((entry) => entry.takeawayChars)).toFixed(0)}</span><p>Avg takeaway chars</p></div>
+        <div><span>${average(allEntries.map((entry) => entry.verseCount)).toFixed(1)}</span><p>Avg verses / day</p></div>
+        <div><span>${average(allEntries.map((entry) => entry.takeawayChars)).toFixed(0)}</span><p>Avg character length of Takeaway</p></div>
         <div><span>${allEntries.length}</span><p>Total readings</p></div>
       </div>
       <div class="score-list">
@@ -305,10 +362,10 @@ function renderScoreboard() {
                   (row) => `
                     <article class="score-row">
                       <strong>${escapeHtml(row.name)}</strong>
-                      <span>${row.daily} day</span>
-                      <span>${row.weekly} week</span>
-                      <span>${row.avgVerses.toFixed(1)} verses</span>
-                      <span>${row.avgTakeaway.toFixed(0)} chars</span>
+                      ${formatStreak(row.daily, 'day') ? `<span>${formatStreak(row.daily, 'day')}</span>` : ''}
+                      ${formatStreak(row.weekly, 'week') ? `<span>${formatStreak(row.weekly, 'week')}</span>` : ''}
+                      <span>${row.avgVerses.toFixed(1)} verses / day</span>
+                      <span>${row.avgTakeaway.toFixed(0)} avg takeaway length</span>
                     </article>
                   `,
                 )
@@ -334,6 +391,7 @@ function render() {
       </section>
 
       <section class="content-panel">
+        <div class="sync-status ${escapeHtml(state.syncStatus.mode)}">${escapeHtml(state.syncStatus.message)}</div>
         ${state.activeTab === 'today' ? renderToday() : ''}
         ${state.activeTab === 'entries' ? renderEntriesTab() : ''}
         ${state.activeTab === 'scoreboard' ? renderScoreboard() : ''}
@@ -348,6 +406,20 @@ function render() {
   `;
 
   bindEvents();
+}
+
+function bindPassageSuggestions() {
+  app.querySelectorAll('[data-passage-suggestion]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.passageText = button.dataset.passageSuggestion || '';
+      const input = app.querySelector('[name="passage"]');
+      if (input) {
+        input.value = state.passageText;
+        input.focus();
+      }
+      updatePassageFeedback();
+    });
+  });
 }
 
 function bindEvents() {
@@ -373,7 +445,7 @@ function bindEvents() {
     state.data.people.push(person);
     state.selectedPersonId = person.id;
     localStorage.setItem(savedPersonKey(group.id), person.id);
-    writeLocal(state.data);
+    saveData();
     syncFormFromSelection();
     render();
   });
@@ -387,12 +459,8 @@ function bindEvents() {
   });
 
   app.querySelector('[name="passage"]')?.addEventListener('input', (event) => {
-    const cursor = event.target.selectionStart;
     state.passageText = event.target.value;
-    render();
-    const input = app.querySelector('[name="passage"]');
-    input?.focus();
-    input?.setSelectionRange(cursor, cursor);
+    updatePassageFeedback();
   });
 
   app.querySelector('[name="readerSelect"]')?.addEventListener('change', (event) => {
@@ -410,23 +478,15 @@ function bindEvents() {
   });
 
   app.querySelector('[name="readerName"]')?.addEventListener('input', (event) => {
-    const cursor = event.target.selectionStart;
     state.readerName = event.target.value;
     const matched = people().find((person) => person.name.toLowerCase() === state.readerName.trim().toLowerCase());
     state.selectedPersonId = matched?.id || newPersonValue;
     if (matched) localStorage.setItem(savedPersonKey(currentGroup().id), matched.id);
-    render();
-    const input = app.querySelector('[name="readerName"]');
-    input?.focus();
-    input?.setSelectionRange(cursor, cursor);
   });
 
   app.querySelector('[name="takeaway"]')?.addEventListener('input', (event) => {
     state.takeaway = event.target.value;
-    render();
-    const textarea = app.querySelector('[name="takeaway"]');
-    textarea?.focus();
-    textarea?.setSelectionRange(textarea.value.length, textarea.value.length);
+    updateTakeawayCount();
   });
 
   app.querySelector('[data-entry-form]')?.addEventListener('submit', (event) => {
@@ -464,9 +524,29 @@ function bindEvents() {
     else state.data.entries.push({ ...payload, createdAt: new Date().toISOString() });
 
     state.error = '';
-    writeLocal(state.data);
+    saveData();
     render();
   });
+
+  bindPassageSuggestions();
+}
+
+function startSync() {
+  syncStore = createSyncStore({
+    getGroup: currentGroup,
+    getPeople: people,
+    getEntries: entries,
+    replaceGroupData,
+    onStatus: (syncStatus) => {
+      state.syncStatus = syncStatus;
+      app.querySelector('.sync-status')?.replaceChildren(document.createTextNode(syncStatus.message));
+      const status = app.querySelector('.sync-status');
+      if (status) status.className = `sync-status ${syncStatus.mode}`;
+    },
+    onRemoteChange: render,
+  });
+  syncStore.start();
 }
 
 render();
+startSync();
