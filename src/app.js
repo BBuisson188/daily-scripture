@@ -1,5 +1,5 @@
-import { createSyncStore } from './syncStore.js';
-import { bibleGatewayUrl, getPassageSuggestions, parsePassage } from './passageParser.js';
+import { createSyncStore } from './syncStore.js?v=2';
+import { bibleGatewayUrl, getPassageSuggestions, parsePassage } from './passageParser.js?v=2';
 
 const localKey = 'daily-scripture-local-v1';
 const defaultGroupSlug = 'main';
@@ -121,6 +121,9 @@ function replaceGroupData(remote) {
     ...state.data.entries.filter((entry) => entry.groupId !== group.id),
     ...entriesForGroup.map((entry) => ({ ...entry, groupId: group.id })),
   ];
+  if (state.selectedPersonId && !state.data.people.some((person) => person.id === state.selectedPersonId)) {
+    state.selectedPersonId = '';
+  }
   saveData({ remote: false });
 }
 
