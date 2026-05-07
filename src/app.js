@@ -1,4 +1,4 @@
-import { createSyncStore } from './syncStore.js?v=5';
+import { createSyncStore } from './syncStore.js?v=7';
 import { bibleGatewayUrl, getPassageSuggestions, parsePassage } from './passageParser.js?v=4';
 
 const localKey = 'daily-scripture-local-v1';
@@ -417,6 +417,7 @@ function render() {
               <path d="M5.8 10.3A7 7 0 1 0 8 5.5" />
             </svg>
           </button>
+          <button class="sync-button" type="button" data-sync-now>Sync now</button>
           <div class="sync-status ${escapeHtml(state.syncStatus.mode)} ${state.syncStatusVisible ? 'visible' : ''}" aria-live="polite">${escapeHtml(state.syncStatus.message)}</div>
         </div>
         ${state.activeTab === 'today' ? renderToday() : ''}
@@ -463,6 +464,10 @@ function bindEvents() {
   app.querySelector('[data-refresh]')?.addEventListener('click', () => {
     state.data = readLocal();
     render();
+  });
+
+  app.querySelector('[data-sync-now]')?.addEventListener('click', () => {
+    syncStore?.syncNow();
   });
 
   app.querySelectorAll('[data-tab]').forEach((button) => {
@@ -567,6 +572,14 @@ function bindEvents() {
     render();
   });
 
+  app.querySelector('[data-entry-form]')?.addEventListener('focusout', (event) => {
+    const nextTarget = event.relatedTarget;
+    const fieldSelector = 'input, select, textarea';
+    const leftField = event.target?.matches?.(fieldSelector);
+    const enteredField = nextTarget?.matches?.(fieldSelector) && nextTarget.closest('[data-entry-form]');
+    if (leftField && enteredField) syncStore?.syncNow({ render: false });
+  });
+
   bindPassageSuggestions();
 }
 
@@ -593,6 +606,20 @@ function showSyncStatus(syncStatus) {
   }
 }
 
+function isEditingEntryForm() {
+  const active = document.activeElement;
+  return Boolean(active?.closest?.('[data-entry-form]'));
+}
+
+function handleRemoteChange() {
+  if (isEditingEntryForm()) {
+    updateSyncStatus();
+    return;
+  }
+  syncFormFromSelection();
+  render();
+}
+
 function startSync() {
   syncStore = createSyncStore({
     getGroup: currentGroup,
@@ -602,7 +629,7 @@ function startSync() {
     onStatus: (syncStatus) => {
       showSyncStatus(syncStatus);
     },
-    onRemoteChange: render,
+    onRemoteChange: handleRemoteChange,
   });
   syncStore.start();
 }

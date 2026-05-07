@@ -70,16 +70,20 @@ button {
   margin: 0 4px 10px;
 }
 
-.undo-button {
+.undo-button,
+.sync-button {
   width: 34px;
   height: 34px;
-  display: inline-grid;
-  place-items: center;
   border: 1px solid rgba(16, 43, 37, 0.12);
   border-radius: 999px;
   color: var(--green);
   background: rgba(255, 253, 248, 0.82);
   box-shadow: 0 8px 18px rgba(35, 45, 39, 0.08);
+}
+
+.undo-button {
+  display: inline-grid;
+  place-items: center;
 }
 
 .undo-button svg {
@@ -95,6 +99,18 @@ button {
 .undo-button:disabled {
   cursor: default;
   opacity: 0.35;
+}
+
+.sync-button {
+  width: auto;
+  min-width: 82px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  font-size: 0.76rem;
+  font-weight: 850;
+  white-space: nowrap;
 }
 
 .sync-status {
