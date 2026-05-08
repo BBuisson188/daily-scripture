@@ -1,4 +1,4 @@
-import { createSyncStore } from './syncStore.js?v=7';
+import { createSyncStore } from './syncStore.js?v=8';
 import { bibleGatewayUrl, getPassageSuggestions, parsePassage } from './passageParser.js?v=4';
 
 const localKey = 'daily-scripture-local-v1';
@@ -17,12 +17,16 @@ const state = {
   activeTab: 'today',
   syncStatus: { mode: 'local', message: 'Local only' },
   syncStatusVisible: false,
+  reactionPickerEntryId: '',
+  reactionDetailEntryId: '',
 };
 
 const newPersonValue = '__new_person__';
 let syncStore = null;
 let undoSnapshot = null;
 let syncStatusTimer = 0;
+let reactionPressTimer = 0;
+let reactionLongPressUsed = false;
 
 function readLocal() {
   const raw = localStorage.getItem(localKey);
@@ -83,6 +87,22 @@ function titleFromSlug(slug) {
 
 function savedPersonKey(groupId) {
   return `daily-scripture-person-${groupId}`;
+}
+
+function devicePerson() {
+  const group = currentGroup();
+  const saved = localStorage.getItem(savedPersonKey(group.id));
+  return saved ? people().find((person) => person.id === saved) : null;
+}
+
+function rememberDevicePerson(person, { committed = false } = {}) {
+  if (!person?.id) return;
+  const group = currentGroup();
+  const key = savedPersonKey(group.id);
+  const saved = localStorage.getItem(key);
+  if (!saved || saved === person.id || committed) {
+    localStorage.setItem(key, person.id);
+  }
 }
 
 function isoDate(date) {
@@ -196,7 +216,10 @@ function syncFormFromSelection() {
 
 function resolveReader() {
   const existing = selectedPerson();
-  if (existing && state.selectedPersonId !== newPersonValue) return existing;
+  if (existing && state.selectedPersonId !== newPersonValue) {
+    rememberDevicePerson(existing, { committed: true });
+    return existing;
+  }
 
   const name = state.readerName.trim();
   if (!name) return null;
@@ -208,8 +231,75 @@ function resolveReader() {
   }
   state.selectedPersonId = person.id;
   state.readerName = person.name;
-  localStorage.setItem(savedPersonKey(group.id), person.id);
+  rememberDevicePerson(person, { committed: true });
   return person;
+}
+
+function entryReactions(entry) {
+  return Object.values(entry.reactions || {}).sort((a, b) => String(a.personName || '').localeCompare(String(b.personName || '')));
+}
+
+function firstEmoji(value) {
+  return Array.from(String(value || '').trim())[0] || '';
+}
+
+function reactionPerson() {
+  return devicePerson() || selectedPerson();
+}
+
+function reactionSummary(entry) {
+  const counts = new Map();
+  for (const reaction of entryReactions(entry)) {
+    if (!reaction.emoji) continue;
+    counts.set(reaction.emoji, (counts.get(reaction.emoji) || 0) + 1);
+  }
+  return [...counts.entries()];
+}
+
+function emojiInputForEntry(entryId) {
+  return [...app.querySelectorAll('[data-emoji-input]')].find((input) => input.dataset.emojiInput === entryId);
+}
+
+function renderReactionDetails(entry) {
+  if (state.reactionDetailEntryId !== entry.id) return '';
+  const reactions = entryReactions(entry);
+  return `
+    <div class="reaction-details">
+      ${
+        reactions.length
+          ? reactions.map((reaction) => `<span><b>${escapeHtml(reaction.emoji)}</b> ${escapeHtml(reaction.personName)}</span>`).join('')
+          : '<span>No reactions yet.</span>'
+      }
+    </div>
+  `;
+}
+
+function renderEmojiPicker(entry) {
+  if (state.reactionPickerEntryId !== entry.id) return '';
+  return `
+    <div class="emoji-picker">
+      <input data-emoji-input="${escapeHtml(entry.id)}" maxlength="8" placeholder="Emoji" autocomplete="off" />
+      <button type="button" data-save-emoji="${escapeHtml(entry.id)}">Use</button>
+    </div>
+  `;
+}
+
+function renderReactions(entry) {
+  const summary = reactionSummary(entry);
+  return `
+    <div class="reaction-panel">
+      ${
+        summary.length
+          ? `<button class="reaction-summary" type="button" data-reaction-details="${escapeHtml(entry.id)}">
+              ${summary.map(([emoji, count]) => `<span>${escapeHtml(emoji)}${count > 1 ? ` ${count}` : ''}</span>`).join('')}
+            </button>`
+          : ''
+      }
+      <button class="reaction-button" type="button" title="Tap to like. Hold for emoji." data-react-entry="${escapeHtml(entry.id)}">+ Like</button>
+    </div>
+    ${renderReactionDetails(entry)}
+    ${renderEmojiPicker(entry)}
+  `;
 }
 
 function renderEntry(entry) {
@@ -224,6 +314,7 @@ function renderEntry(entry) {
         </div>
         <span>${entry.verseCount ?? '?'} verses</span>
       </div>
+      ${renderReactions(entry)}
       <p class="takeaway">${escapeHtml(entry.takeaway)}</p>
       ${
         url
@@ -450,6 +541,43 @@ function bindPassageSuggestions() {
   });
 }
 
+function setEntryReaction(entryId, emojiValue) {
+  const emoji = firstEmoji(emojiValue) || '👍';
+  const person = reactionPerson();
+  if (!person) {
+    state.error = 'Choose your name on Today first.';
+    state.activeTab = 'today';
+    state.reactionPickerEntryId = '';
+    state.reactionDetailEntryId = '';
+    render();
+    return;
+  }
+
+  const entry = entries().find((item) => item.id === entryId);
+  if (!entry) return;
+
+  rememberUndo();
+  rememberDevicePerson(person, { committed: true });
+  const reactions = { ...(entry.reactions || {}) };
+  const current = reactions[person.id];
+  if (current?.emoji === emoji && state.reactionPickerEntryId !== entryId) {
+    delete reactions[person.id];
+  } else {
+    reactions[person.id] = {
+      personId: person.id,
+      personName: person.name,
+      emoji,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+  if (Object.keys(reactions).length) entry.reactions = reactions;
+  else delete entry.reactions;
+  state.reactionPickerEntryId = '';
+  state.reactionDetailEntryId = entry.id;
+  saveData();
+  render();
+}
+
 function bindEvents() {
   app.querySelector('[data-undo]')?.addEventListener('click', () => {
     if (!undoSnapshot) return;
@@ -470,6 +598,59 @@ function bindEvents() {
     syncStore?.syncNow();
   });
 
+  app.querySelectorAll('[data-reaction-details]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.reactionDetailEntryId = state.reactionDetailEntryId === button.dataset.reactionDetails ? '' : button.dataset.reactionDetails;
+      state.reactionPickerEntryId = '';
+      render();
+    });
+  });
+
+  app.querySelectorAll('[data-react-entry]').forEach((button) => {
+    button.addEventListener('pointerdown', () => {
+      reactionLongPressUsed = false;
+      window.clearTimeout(reactionPressTimer);
+      reactionPressTimer = window.setTimeout(() => {
+        reactionLongPressUsed = true;
+        state.reactionPickerEntryId = button.dataset.reactEntry;
+        state.reactionDetailEntryId = '';
+        render();
+        window.setTimeout(() => emojiInputForEntry(button.dataset.reactEntry)?.focus(), 0);
+      }, 520);
+    });
+    button.addEventListener('pointerup', () => {
+      window.clearTimeout(reactionPressTimer);
+    });
+    button.addEventListener('pointercancel', () => {
+      window.clearTimeout(reactionPressTimer);
+    });
+    button.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+    });
+    button.addEventListener('click', () => {
+      if (reactionLongPressUsed) {
+        reactionLongPressUsed = false;
+        return;
+      }
+      setEntryReaction(button.dataset.reactEntry, '👍');
+    });
+  });
+
+  app.querySelectorAll('[data-save-emoji]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const input = emojiInputForEntry(button.dataset.saveEmoji);
+      setEntryReaction(button.dataset.saveEmoji, firstEmoji(input?.value));
+    });
+  });
+
+  app.querySelectorAll('[data-emoji-input]').forEach((input) => {
+    input.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      setEntryReaction(input.dataset.emojiInput, firstEmoji(input.value));
+    });
+  });
+
   app.querySelectorAll('[data-tab]').forEach((button) => {
     button.addEventListener('click', () => {
       state.activeTab = button.dataset.tab;
@@ -487,7 +668,7 @@ function bindEvents() {
     const person = { id: `person-${crypto.randomUUID()}`, groupId: group.id, name, active: true };
     state.data.people.push(person);
     state.selectedPersonId = person.id;
-    localStorage.setItem(savedPersonKey(group.id), person.id);
+    rememberDevicePerson(person, { committed: true });
     saveData();
     syncFormFromSelection();
     render();
@@ -514,7 +695,7 @@ function bindEvents() {
     } else {
       const person = people().find((item) => item.id === value);
       state.readerName = person?.name || '';
-      if (person) localStorage.setItem(savedPersonKey(currentGroup().id), person.id);
+      if (person) rememberDevicePerson(person);
       syncFormFromSelection();
     }
     render();
@@ -524,7 +705,7 @@ function bindEvents() {
     state.readerName = event.target.value;
     const matched = people().find((person) => person.name.toLowerCase() === state.readerName.trim().toLowerCase());
     state.selectedPersonId = matched?.id || newPersonValue;
-    if (matched) localStorage.setItem(savedPersonKey(currentGroup().id), matched.id);
+    if (matched) rememberDevicePerson(matched);
   });
 
   app.querySelector('[name="takeaway"]')?.addEventListener('input', (event) => {
@@ -534,15 +715,15 @@ function bindEvents() {
 
   app.querySelector('[data-entry-form]')?.addEventListener('submit', (event) => {
     event.preventDefault();
-    const person = resolveReader();
     const passage = parsePassage(state.passageText);
-    if (!person) {
-      state.error = 'Add your name first.';
+    if (!state.passageText.trim() || !state.takeaway.trim()) {
+      state.error = 'Add both a passage and a takeaway.';
       render();
       return;
     }
-    if (!state.passageText.trim() || !state.takeaway.trim()) {
-      state.error = 'Add both a passage and a takeaway.';
+    const person = resolveReader();
+    if (!person) {
+      state.error = 'Add your name first.';
       render();
       return;
     }

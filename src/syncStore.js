@@ -26,15 +26,48 @@ function itemStamp(item) {
   return Date.parse(item?.updatedAt || item?.createdAt || 0) || 0;
 }
 
+function reactionStamp(reaction) {
+  return Date.parse(reaction?.updatedAt || 0) || 0;
+}
+
+function normalizeReactions(reactions) {
+  if (!reactions) return [];
+  return Array.isArray(reactions) ? reactions : Object.values(reactions);
+}
+
+function mergeReactions(...reactionSets) {
+  const merged = new Map();
+
+  for (const reaction of reactionSets.flatMap(normalizeReactions)) {
+    if (!reaction?.personId) continue;
+    const existing = merged.get(reaction.personId);
+    if (!existing || reactionStamp(reaction) >= reactionStamp(existing)) {
+      merged.set(reaction.personId, { ...existing, ...reaction });
+    }
+  }
+
+  return Object.fromEntries([...merged.entries()].sort(([a], [b]) => String(a).localeCompare(String(b))));
+}
+
+function mergeItem(existing, item) {
+  if (!existing) return item;
+
+  const newer = itemStamp(item) >= itemStamp(existing) ? item : existing;
+  const older = newer === item ? existing : item;
+  const merged = { ...older, ...newer };
+  const reactions = mergeReactions(existing.reactions, item.reactions);
+  if (Object.keys(reactions).length) merged.reactions = reactions;
+  else delete merged.reactions;
+  return merged;
+}
+
 function mergeList(remoteItems = [], localItems = []) {
   const merged = new Map();
 
   for (const item of [...remoteItems, ...localItems]) {
     if (!item?.id) continue;
     const existing = merged.get(item.id);
-    if (!existing || itemStamp(item) >= itemStamp(existing)) {
-      merged.set(item.id, { ...existing, ...item });
-    }
+    merged.set(item.id, mergeItem(existing, item));
   }
 
   return [...merged.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));

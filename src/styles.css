@@ -403,6 +403,84 @@ h2 {
   font-weight: 800;
 }
 
+.reaction-panel {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.reaction-summary,
+.reaction-button,
+.emoji-picker button {
+  min-height: 34px;
+  border: 1px solid rgba(45, 81, 59, 0.16);
+  border-radius: 999px;
+  color: var(--green);
+  background: #edf1e9;
+  font-size: 0.84rem;
+  font-weight: 850;
+}
+
+.reaction-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+}
+
+.reaction-summary span {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.reaction-button {
+  padding: 0 12px;
+}
+
+.reaction-details,
+.emoji-picker {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid rgba(16, 43, 37, 0.12);
+  border-radius: 12px;
+  background: rgba(237, 241, 233, 0.72);
+}
+
+.reaction-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: rgba(16, 43, 37, 0.8);
+  font-size: 0.86rem;
+}
+
+.reaction-details b {
+  margin-right: 2px;
+}
+
+.emoji-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.emoji-picker input {
+  min-width: 0;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 1.1rem;
+}
+
+.emoji-picker button {
+  padding: 0 13px;
+}
+
 .takeaway {
   margin: 12px 0 0;
   color: rgba(16, 43, 37, 0.86);
