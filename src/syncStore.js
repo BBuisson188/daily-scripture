@@ -1,4 +1,5 @@
 import { firebaseDatabaseUrl } from './firebaseConfig.js';
+import { getFirebaseAuthToken } from './firebaseAuth.js';
 
 function cleanDatabaseUrl(url) {
   return String(url || '').trim().replace(/\/+$/, '');
@@ -101,6 +102,10 @@ function sameSnapshot(a, b) {
   });
 }
 
+function syncErrorMessage(error, fallback) {
+  return error?.message === 'Firebase API key is missing' ? 'Auth setup needed' : fallback;
+}
+
 export function createSyncStore({ getGroup, getPeople, getEntries, replaceGroupData, onStatus, onRemoteChange }) {
   const url = groupUrl(getGroup().slug);
   let saving = false;
@@ -115,6 +120,11 @@ export function createSyncStore({ getGroup, getPeople, getEntries, replaceGroupD
     while (syncing) {
       await new Promise((resolve) => globalThis.setTimeout(resolve, 50));
     }
+  }
+
+  async function syncUrl() {
+    const token = await getFirebaseAuthToken();
+    return `${url}?auth=${encodeURIComponent(token)}`;
   }
 
   function snapshot() {
@@ -142,9 +152,9 @@ export function createSyncStore({ getGroup, getPeople, getEntries, replaceGroupD
     status({ mode: 'saving', message: 'Syncing...' });
     try {
       const local = snapshot();
-      const remote = await requestJson(url);
+      const remote = await requestJson(await syncUrl());
       if (!remote) {
-        await requestJson(url, {
+        await requestJson(await syncUrl(), {
           method: 'PUT',
           body: JSON.stringify(local),
         });
@@ -162,7 +172,7 @@ export function createSyncStore({ getGroup, getPeople, getEntries, replaceGroupD
         if (render) onRemoteChange?.();
       }
       if (!sameSnapshot(merged, remote)) {
-        await requestJson(url, {
+        await requestJson(await syncUrl(), {
           method: 'PUT',
           body: JSON.stringify(merged),
         });
@@ -171,7 +181,7 @@ export function createSyncStore({ getGroup, getPeople, getEntries, replaceGroupD
       if (!changed) status({ mode: 'online', message: 'Online' });
       ready = true;
     } catch (error) {
-      status({ mode: 'offline', message: 'Sync paused' });
+      status({ mode: 'offline', message: syncErrorMessage(error, 'Sync paused') });
     } finally {
       syncing = false;
     }
@@ -184,15 +194,15 @@ export function createSyncStore({ getGroup, getPeople, getEntries, replaceGroupD
     status({ mode: 'saving', message: 'Saving online...' });
     try {
       const local = snapshot();
-      const remote = merge ? await requestJson(url).catch(() => null) : null;
+      const remote = merge ? await requestJson(await syncUrl()).catch(() => null) : null;
       const data = merge ? mergeSnapshots(remote, local) : local;
-      await requestJson(url, {
+      await requestJson(await syncUrl(), {
         method: 'PUT',
         body: JSON.stringify(data),
       });
       status({ mode: 'online', message: 'Synced' });
     } catch (error) {
-      status({ mode: 'offline', message: 'Saved locally' });
+      status({ mode: 'offline', message: syncErrorMessage(error, 'Saved locally') });
     } finally {
       saving = false;
     }

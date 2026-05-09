@@ -1,0 +1,140 @@
+{
+  "rules": {
+    "groups": {
+      "$slug": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        ".validate": "newData.hasChildren(['name', 'slug', 'updatedAt', 'people', 'entries']) && newData.child('name').isString() && newData.child('slug').isString() && newData.child('updatedAt').isString()",
+        "name": {
+          ".validate": "newData.isString() && newData.val().length <= 120"
+        },
+        "slug": {
+          ".validate": "newData.isString() && newData.val() == $slug"
+        },
+        "updatedAt": {
+          ".validate": "newData.isString()"
+        },
+        "people": {
+          "$personIndex": {
+            ".validate": "newData.hasChildren(['id', 'groupId', 'name'])",
+            "id": {
+              ".validate": "newData.isString() && newData.val().length <= 120"
+            },
+            "groupId": {
+              ".validate": "newData.isString() && newData.val().length <= 120"
+            },
+            "name": {
+              ".validate": "newData.isString() && newData.val().length <= 120"
+            },
+            "active": {
+              ".validate": "newData.isBoolean()"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "entries": {
+          "$entryIndex": {
+            ".validate": "newData.hasChildren(['id', 'groupId', 'personId', 'personName', 'entryDate', 'passageText', 'takeaway', 'takeawayChars', 'updatedAt'])",
+            "id": {
+              ".validate": "newData.isString() && newData.val().length <= 160"
+            },
+            "groupId": {
+              ".validate": "newData.isString() && newData.val().length <= 120"
+            },
+            "personId": {
+              ".validate": "newData.isString() && newData.val().length <= 120"
+            },
+            "personName": {
+              ".validate": "newData.isString() && newData.val().length <= 120"
+            },
+            "entryDate": {
+              ".validate": "newData.isString() && newData.val().length == 10"
+            },
+            "passageText": {
+              ".validate": "newData.isString() && newData.val().length <= 500"
+            },
+            "normalizedPassage": {
+              ".validate": "newData.isString() && newData.val().length <= 500"
+            },
+            "parsedRanges": {
+              "$rangeIndex": {
+                ".validate": "newData.hasChildren(['book', 'startChapter', 'startVerse', 'endChapter', 'endVerse', 'verseCount', 'label'])",
+                "book": {
+                  ".validate": "newData.isString() && newData.val().length <= 80"
+                },
+                "startChapter": {
+                  ".validate": "newData.isNumber()"
+                },
+                "startVerse": {
+                  ".validate": "newData.isNumber()"
+                },
+                "endChapter": {
+                  ".validate": "newData.isNumber()"
+                },
+                "endVerse": {
+                  ".validate": "newData.isNumber()"
+                },
+                "verseCount": {
+                  ".validate": "newData.isNumber()"
+                },
+                "label": {
+                  ".validate": "newData.isString() && newData.val().length <= 160"
+                },
+                "$other": {
+                  ".validate": false
+                }
+              }
+            },
+            "verseCount": {
+              ".validate": "newData.isNumber()"
+            },
+            "takeaway": {
+              ".validate": "newData.isString() && newData.val().length <= 4000"
+            },
+            "takeawayChars": {
+              ".validate": "newData.isNumber()"
+            },
+            "createdAt": {
+              ".validate": "newData.isString()"
+            },
+            "updatedAt": {
+              ".validate": "newData.isString()"
+            },
+            "reactions": {
+              "$personId": {
+                ".validate": "newData.hasChildren(['personId', 'personName', 'emoji', 'updatedAt']) && newData.child('personId').val() == $personId",
+                "personId": {
+                  ".validate": "newData.isString() && newData.val().length <= 120"
+                },
+                "personName": {
+                  ".validate": "newData.isString() && newData.val().length <= 120"
+                },
+                "emoji": {
+                  ".validate": "newData.isString() && newData.val().length <= 16"
+                },
+                "updatedAt": {
+                  ".validate": "newData.isString()"
+                },
+                "$other": {
+                  ".validate": false
+                }
+              }
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "$other": {
+      ".read": false,
+      ".write": false
+    }
+  }
+}

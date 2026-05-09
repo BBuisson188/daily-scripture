@@ -8,6 +8,7 @@
 - Styled the UI to match the provided Daily Scripture mockup, using `backgrnd.png` as the top hero image and simple mobile-first panels.
 - Added bottom navigation icons from `src/assets/icons`.
 - Added Firebase Realtime Database sync for shared group data.
+- Added silent Firebase Anonymous Auth support. Sync requests now wait for an anonymous Auth ID token and send it to Realtime Database REST requests.
 - Sync is deliberate: startup performs one merge with Firebase to protect unsynced device data, `Sync now` performs a manual merge, and moving between entry form fields can also sync without repainting the form mid-edit.
 - Added per-device reader memory that is quick to initialize but slow to change: once a device has a saved reader, changing the selected reader only updates the device owner after a real entry save or another committed action.
 - Added per-entry emoji reactions. Tapping `+ Like` gives a thumbs-up; holding it opens an emoji input. Tapping existing reaction chips shows who reacted.
@@ -27,6 +28,7 @@
   - `src/passageParser.js`: scripture reference parsing, suggestions, Bible Gateway URL generation.
   - `src/bibleData.js`: Bible book aliases and chapter verse counts.
   - `src/syncStore.js`: Firebase Realtime Database sync.
+  - `src/firebaseAuth.js`: silent Firebase Anonymous Auth via REST.
   - `src/firebaseConfig.js`: Firebase database URL.
   - `src/styles.css`: mobile app styling.
   - `manifest.webmanifest`: PWA manifest.
@@ -56,12 +58,19 @@
 - Keep cache-busting query strings in `index.html` updated when publishing JS/CSS, or GitHub Pages/mobile Safari may keep serving old code.
 - For small text-only changes, the GitHub connector `update_file` path is also fine. For multiple files, the `gh api` Git tree flow is faster and keeps all changes in one commit.
 - Binary uploads such as `png-icon/` are still better handled by a real Git checkout or manual GitHub upload until this workspace becomes a proper repo.
+- Auth/rules files:
+  - `firebase.json`: points Firebase CLI at the rules files.
+  - `database.rules.json`: Realtime Database rules for the app's current `/groups/{slug}` REST data.
+  - `firestore.rules`: Cloud Firestore rules for a possible `/groups/{groupId}` shape; the current app does not use Firestore.
 
 ## Unresolved Issues
 
 - The PNG files in local `png-icon/` are referenced by the app but are not currently present on GitHub, so iPhone home-screen icons are missing.
 - Local workspace is not a git repository; publishing has been done through the GitHub connector and `gh api`.
 - Binary file publishing through the current GitHub connector path is unreliable, so the `png-icon` folder likely needs to be uploaded manually in GitHub.
+- `src/firebaseConfig.js` needs the public Firebase Web API key filled into `firebaseApiKey` before authenticated sync can work.
+- Firebase Console must have Anonymous Authentication enabled: Authentication > Sign-in method > Anonymous > Enable.
+- The Firebase warning was for Cloud Firestore, but the app currently uses Realtime Database. If Firestore is unused, `firestore.rules` can safely lock everything except an authenticated `/groups/{groupId}` document shape.
 - There is no timed background polling. Users can tap `Sync now`, and moving from one form field to another does a cautious merge without repainting the entry form.
 - Reaction sync merges `entry.reactions` by `personId` and `reaction.updatedAt` so two people reacting to the same entry are less likely to overwrite each other.
 - Undo is one-step only and primarily covers the last saved data change.
@@ -89,6 +98,7 @@
 ## Important Implementation Notes
 
 - Do not render over the entry form while the user is typing.
+- Firebase sync waits for `getFirebaseAuthToken()` before any Realtime Database read/write starts. If `firebaseApiKey` is blank, the UI shows `Auth setup needed` and keeps local data.
 - `syncStore.start()` calls `loadRemote()` once; do not add timed polling unless the form focus behavior is revisited.
 - Normal saves merge remote and local data. Undo saves call `syncStore.save({ merge: false })` so the restored local snapshot replaces Firebase instead of remote data reappearing.
 - Device owner is stored in local storage as `daily-scripture-person-{groupId}`. If no owner is saved, selecting/matching a reader can initialize it. If an owner already exists, only committed entry/reaction actions should replace it.
