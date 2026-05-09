@@ -1,7 +1,21 @@
-import { firebaseApiKey } from './firebaseConfig.js';
+import { firebaseApiKey } from './firebaseConfig.js?v=2';
 
 const authKey = 'daily-scripture-firebase-auth-v1';
 const expiryBufferMs = 60 * 1000;
+const requestTimeoutMs = 10000;
+
+async function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timer = globalThis.setTimeout(() => controller.abort(), requestTimeoutMs);
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } finally {
+    globalThis.clearTimeout(timer);
+  }
+}
 
 function cleanApiKey() {
   return String(firebaseApiKey || '').trim();
@@ -28,7 +42,7 @@ function sessionFromResponse(data) {
 }
 
 async function requestAuthJson(url, body) {
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -45,7 +59,7 @@ async function createAnonymousSession(apiKey) {
 }
 
 async function refreshSession(apiKey, refreshToken) {
-  const response = await fetch(`https://securetoken.googleapis.com/v1/token?key=${encodeURIComponent(apiKey)}`, {
+  const response = await fetchWithTimeout(`https://securetoken.googleapis.com/v1/token?key=${encodeURIComponent(apiKey)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({

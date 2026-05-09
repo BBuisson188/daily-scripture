@@ -1,5 +1,7 @@
-import { firebaseDatabaseUrl } from './firebaseConfig.js';
-import { getFirebaseAuthToken } from './firebaseAuth.js';
+import { firebaseDatabaseUrl } from './firebaseConfig.js?v=2';
+import { getFirebaseAuthToken } from './firebaseAuth.js?v=2';
+
+const requestTimeoutMs = 10000;
 
 function cleanDatabaseUrl(url) {
   return String(url || '').trim().replace(/\/+$/, '');
@@ -12,15 +14,22 @@ function groupUrl(slug) {
 }
 
 async function requestJson(url, options = {}) {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-  });
-  if (!response.ok) throw new Error(`Sync failed (${response.status})`);
-  return response.json();
+  const controller = new AbortController();
+  const timer = globalThis.setTimeout(() => controller.abort(), requestTimeoutMs);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers || {}),
+      },
+    });
+    if (!response.ok) throw new Error(`Sync failed (${response.status})`);
+    return response.json();
+  } finally {
+    globalThis.clearTimeout(timer);
+  }
 }
 
 function itemStamp(item) {

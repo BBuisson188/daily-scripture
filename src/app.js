@@ -1,4 +1,4 @@
-import { createSyncStore } from './syncStore.js?v=9';
+import { createSyncStore } from './syncStore.js?v=10';
 import { bibleGatewayUrl, getPassageSuggestions, parsePassage } from './passageParser.js?v=4';
 
 const localKey = 'daily-scripture-local-v1';
