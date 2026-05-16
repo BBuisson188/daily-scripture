@@ -9,7 +9,7 @@
 - Added bottom navigation icons from `src/assets/icons`.
 - Added Firebase Realtime Database sync for shared group data.
 - Added silent Firebase Anonymous Auth support. Sync requests now wait for an anonymous Auth ID token and send it to Realtime Database REST requests.
-- Sync is deliberate: startup performs one merge with Firebase to protect unsynced device data, `Sync now` performs a manual merge, and moving between entry form fields can also sync without repainting the form mid-edit.
+- Sync is deliberate and serialized: startup performs one merge with Firebase to protect unsynced device data, `Sync now` performs a manual merge, and moving between entry form fields can also sync without repainting the form mid-edit. Sync operations run through one queue so a device cannot overlap its own saves.
 - Added per-device reader memory that is quick to initialize but slow to change: once a device has a saved reader, changing the selected reader only updates the device owner after a real entry save or another committed action.
 - Added per-entry emoji reactions. Tapping `+ Like` gives a thumbs-up; holding it opens an emoji input. Tapping existing reaction chips shows who reacted.
 - Added a temporary sync notice: `Saving online...` / `Synced` appears during sync, then disappears after 5 seconds.
@@ -32,10 +32,15 @@
   - `src/firebaseConfig.js`: Firebase database URL.
   - `src/styles.css`: mobile app styling.
   - `manifest.webmanifest`: PWA manifest.
-- Data shape in local storage and Firebase:
+- Data shape in local storage:
   - `groups`: group metadata.
   - `people`: reader records scoped by `groupId`.
   - `entries`: daily reading records scoped by `groupId`; entries may include `reactions` keyed by `personId`.
+- Data shape in Firebase Realtime Database:
+  - `/groups/{slug}` uses `schemaVersion: 2`.
+  - `peopleById`: reader records keyed by person id.
+  - `entriesById`: reading records keyed by entry id.
+  - The app still reads old `people` and `entries` arrays for migration compatibility, but new writes remove those legacy array fields.
 - Group routing is prepared for `/g/{slug}` URLs, with `main` as the default group.
 - The selected reader is stored per device in local storage with `daily-scripture-person-{groupId}`.
 
@@ -75,7 +80,7 @@
 - Reaction sync merges `entry.reactions` by `personId` and `reaction.updatedAt` so two people reacting to the same entry are less likely to overwrite each other.
 - Undo is one-step only and primarily covers the last saved data change.
 - Deletes are not fully built out in the UI yet, though undo was added with accidental changes in mind.
-- Firebase rules/security are intentionally permissive for simplicity; no user login exists.
+- Firebase rules/security are intentionally permissive for simplicity; no user login exists. Rules now require `schemaVersion: 2` and keyed records, which blocks old open browser tabs from overwriting the new structure with legacy whole-group array writes.
 - Parser support is improved but should still be tested against more real-world references and abbreviations.
 
 ## Next Recommended Steps
@@ -99,6 +104,7 @@
 
 - Do not render over the entry form while the user is typing.
 - Firebase sync waits for `getFirebaseAuthToken()` before any Realtime Database read/write starts. If `firebaseApiKey` is blank, the UI shows `Auth setup needed` and keeps local data.
+- New sync writes use keyed `peopleById/{id}` and `entriesById/{id}` patches instead of whole-group `PUT`s whenever remote data already exists. This prevents one user's save from replacing unrelated entries from other users.
 - `syncStore.start()` calls `loadRemote()` once; do not add timed polling unless the form focus behavior is revisited.
 - Normal saves merge remote and local data. Undo saves call `syncStore.save({ merge: false })` so the restored local snapshot replaces Firebase instead of remote data reappearing.
 - Device owner is stored in local storage as `daily-scripture-person-{groupId}`. If no owner is saved, selecting/matching a reader can initialize it. If an owner already exists, only committed entry/reaction actions should replace it.

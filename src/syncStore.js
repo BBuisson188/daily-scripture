@@ -45,6 +45,20 @@ function normalizeReactions(reactions) {
   return Array.isArray(reactions) ? reactions : Object.values(reactions);
 }
 
+function normalizeCollection(collection) {
+  if (!collection) return [];
+  return Array.isArray(collection) ? collection.filter(Boolean) : Object.values(collection).filter(Boolean);
+}
+
+function byId(items = []) {
+  return Object.fromEntries(
+    [...items]
+      .filter((item) => item?.id)
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)))
+      .map((item) => [item.id, item]),
+  );
+}
+
 function mergeReactions(...reactionSets) {
   const merged = new Map();
 
@@ -83,6 +97,19 @@ function mergeList(remoteItems = [], localItems = []) {
   return [...merged.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
 }
 
+function normalizeSnapshot(data) {
+  if (!data) return null;
+  return {
+    name: data.name,
+    slug: data.slug,
+    updatedAt: data.updatedAt,
+    schemaVersion: data.schemaVersion,
+    hasLegacyCollections: Boolean(data.people || data.entries),
+    people: mergeList(normalizeCollection(data.people), normalizeCollection(data.peopleById)),
+    entries: mergeList(normalizeCollection(data.entries), normalizeCollection(data.entriesById)),
+  };
+}
+
 function mergeSnapshots(remote, local) {
   if (!remote) return local;
   if (!local) return remote;
@@ -96,19 +123,64 @@ function mergeSnapshots(remote, local) {
   };
 }
 
+function serializableSnapshot(snapshotData) {
+  return {
+    name: snapshotData.name || '',
+    slug: snapshotData.slug || '',
+    people: snapshotData.people || [],
+    entries: snapshotData.entries || [],
+  };
+}
+
 function sameSnapshot(a, b) {
   if (!a || !b) return a === b;
-  return JSON.stringify({
-    name: a.name || '',
-    slug: a.slug || '',
-    people: a.people || [],
-    entries: a.entries || [],
-  }) === JSON.stringify({
-    name: b.name || '',
-    slug: b.slug || '',
-    people: b.people || [],
-    entries: b.entries || [],
-  });
+  return JSON.stringify(serializableSnapshot(a)) === JSON.stringify(serializableSnapshot(b));
+}
+
+function sameItem(a, b) {
+  return JSON.stringify(a || null) === JSON.stringify(b || null);
+}
+
+function groupPayload(data) {
+  return {
+    name: data.name,
+    slug: data.slug,
+    updatedAt: data.updatedAt,
+    schemaVersion: 2,
+    peopleById: byId(data.people),
+    entriesById: byId(data.entries),
+  };
+}
+
+function changedItems(remoteItems = [], mergedItems = [], force = false) {
+  if (force) return mergedItems;
+  const remoteById = byId(remoteItems);
+  return mergedItems.filter((item) => !sameItem(item, remoteById[item.id]));
+}
+
+function patchPayload(remote, merged) {
+  const forceKeyedWrite = remote?.schemaVersion !== 2 || remote?.hasLegacyCollections;
+  const patch = {
+    name: merged.name,
+    slug: merged.slug,
+    updatedAt: merged.updatedAt,
+    schemaVersion: 2,
+    people: null,
+    entries: null,
+  };
+
+  for (const person of changedItems(remote?.people, merged.people, forceKeyedWrite)) {
+    patch[`peopleById/${person.id}`] = person;
+  }
+  for (const entry of changedItems(remote?.entries, merged.entries, forceKeyedWrite)) {
+    patch[`entriesById/${entry.id}`] = entry;
+  }
+
+  return patch;
+}
+
+function needsSchemaWrite(remote, merged) {
+  return remote?.schemaVersion !== 2 || remote?.hasLegacyCollections || !sameSnapshot(merged, remote);
 }
 
 function syncErrorMessage(error, fallback) {
@@ -117,18 +189,16 @@ function syncErrorMessage(error, fallback) {
 
 export function createSyncStore({ getGroup, getPeople, getEntries, replaceGroupData, onStatus, onRemoteChange }) {
   const url = groupUrl(getGroup().slug);
-  let saving = false;
-  let syncing = false;
   let ready = false;
+  let queue = Promise.resolve();
 
   function status(value) {
     onStatus?.(value);
   }
 
-  async function waitForSync() {
-    while (syncing) {
-      await new Promise((resolve) => globalThis.setTimeout(resolve, 50));
-    }
+  function enqueue(operation) {
+    queue = queue.then(operation, operation);
+    return queue;
   }
 
   async function syncUrl() {
@@ -155,17 +225,24 @@ export function createSyncStore({ getGroup, getPeople, getEntries, replaceGroupD
     };
   }
 
-  async function loadRemote({ render = true } = {}) {
-    if (!url || saving || syncing) return;
-    syncing = true;
+  function applyMergedData(data, { render = true } = {}) {
+    const local = snapshot();
+    if (sameSnapshot(data, local)) return false;
+    replaceGroupData(data);
+    if (render) onRemoteChange?.();
+    return true;
+  }
+
+  async function loadRemoteNow({ render = true } = {}) {
+    if (!url) return;
     status({ mode: 'saving', message: 'Syncing...' });
     try {
       const local = snapshot();
-      const remote = await requestJson(await syncUrl());
+      const remote = normalizeSnapshot(await requestJson(await syncUrl()));
       if (!remote) {
         await requestJson(await syncUrl(), {
           method: 'PUT',
-          body: JSON.stringify(local),
+          body: JSON.stringify(groupPayload(local)),
         });
         status({ mode: 'online', message: 'Synced' });
         ready = true;
@@ -174,16 +251,14 @@ export function createSyncStore({ getGroup, getPeople, getEntries, replaceGroupD
 
       const merged = mergeSnapshots(remote, local);
       let changed = false;
-      if (!sameSnapshot(merged, local)) {
-        replaceGroupData(merged);
+      if (applyMergedData(merged, { render })) {
         status({ mode: 'online', message: 'Synced' });
         changed = true;
-        if (render) onRemoteChange?.();
       }
-      if (!sameSnapshot(merged, remote)) {
+      if (needsSchemaWrite(remote, merged)) {
         await requestJson(await syncUrl(), {
-          method: 'PUT',
-          body: JSON.stringify(merged),
+          method: 'PATCH',
+          body: JSON.stringify(patchPayload(remote, merged)),
         });
         changed = true;
       }
@@ -191,30 +266,35 @@ export function createSyncStore({ getGroup, getPeople, getEntries, replaceGroupD
       ready = true;
     } catch (error) {
       status({ mode: 'offline', message: syncErrorMessage(error, 'Sync paused') });
-    } finally {
-      syncing = false;
     }
   }
 
-  async function save({ merge = true } = {}) {
+  async function saveNow({ merge = true } = {}) {
     if (!url) return;
-    if (syncing) await waitForSync();
-    saving = true;
     status({ mode: 'saving', message: 'Saving online...' });
     try {
       const local = snapshot();
-      const remote = merge ? await requestJson(await syncUrl()).catch(() => null) : null;
+      const remote = merge ? normalizeSnapshot(await requestJson(await syncUrl()).catch(() => null)) : null;
       const data = merge ? mergeSnapshots(remote, local) : local;
       await requestJson(await syncUrl(), {
-        method: 'PUT',
-        body: JSON.stringify(data),
+        method: remote ? 'PATCH' : 'PUT',
+        body: JSON.stringify(remote ? patchPayload(remote, data) : groupPayload(data)),
       });
+
+      const latest = merge ? normalizeSnapshot(await requestJson(await syncUrl()).catch(() => data)) : data;
+      applyMergedData(latest || data, { render: false });
       status({ mode: 'online', message: 'Synced' });
     } catch (error) {
       status({ mode: 'offline', message: syncErrorMessage(error, 'Saved locally') });
-    } finally {
-      saving = false;
     }
+  }
+
+  function loadRemote(options) {
+    return enqueue(() => loadRemoteNow(options));
+  }
+
+  function save(options) {
+    return enqueue(() => saveNow(options));
   }
 
   async function start() {

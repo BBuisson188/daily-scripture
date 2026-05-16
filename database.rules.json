@@ -4,7 +4,7 @@
       "$slug": {
         ".read": "auth != null",
         ".write": "auth != null",
-        ".validate": "newData.hasChildren(['name', 'slug', 'updatedAt', 'people', 'entries']) && newData.child('name').isString() && newData.child('slug').isString() && newData.child('updatedAt').isString()",
+        ".validate": "newData.hasChildren(['name', 'slug', 'updatedAt', 'schemaVersion']) && newData.child('name').isString() && newData.child('slug').isString() && newData.child('slug').val() == $slug && newData.child('updatedAt').isString() && newData.child('schemaVersion').isNumber() && newData.child('schemaVersion').val() == 2 && !newData.child('people').exists() && !newData.child('entries').exists()",
         "name": {
           ".validate": "newData.isString() && newData.val().length <= 120"
         },
@@ -14,9 +14,18 @@
         "updatedAt": {
           ".validate": "newData.isString()"
         },
+        "schemaVersion": {
+          ".validate": "newData.isNumber() && newData.val() == 2"
+        },
         "people": {
-          "$personIndex": {
-            ".validate": "newData.hasChildren(['id', 'groupId', 'name'])",
+          ".validate": "!newData.exists()"
+        },
+        "entries": {
+          ".validate": "!newData.exists()"
+        },
+        "peopleById": {
+          "$personId": {
+            ".validate": "newData.hasChildren(['id', 'groupId', 'name']) && newData.child('id').val() == $personId",
             "id": {
               ".validate": "newData.isString() && newData.val().length <= 120"
             },
@@ -29,14 +38,20 @@
             "active": {
               ".validate": "newData.isBoolean()"
             },
+            "createdAt": {
+              ".validate": "newData.isString()"
+            },
+            "updatedAt": {
+              ".validate": "newData.isString()"
+            },
             "$other": {
               ".validate": false
             }
           }
         },
-        "entries": {
-          "$entryIndex": {
-            ".validate": "newData.hasChildren(['id', 'groupId', 'personId', 'personName', 'entryDate', 'passageText', 'takeaway', 'takeawayChars', 'updatedAt'])",
+        "entriesById": {
+          "$entryId": {
+            ".validate": "newData.hasChildren(['id', 'groupId', 'personId', 'personName', 'entryDate', 'passageText', 'takeaway', 'takeawayChars', 'updatedAt']) && newData.child('id').val() == $entryId",
             "id": {
               ".validate": "newData.isString() && newData.val().length <= 160"
             },

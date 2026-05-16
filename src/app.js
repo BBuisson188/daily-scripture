@@ -1,4 +1,4 @@
-import { createSyncStore } from './syncStore.js?v=10';
+import { createSyncStore } from './syncStore.js?v=12';
 import { bibleGatewayUrl, getPassageSuggestions, parsePassage } from './passageParser.js?v=4';
 
 const localKey = 'daily-scripture-local-v1';
@@ -226,7 +226,8 @@ function resolveReader() {
   const group = currentGroup();
   let person = people().find((item) => item.name.toLowerCase() === name.toLowerCase());
   if (!person) {
-    person = { id: `person-${crypto.randomUUID()}`, groupId: group.id, name, active: true };
+    const now = new Date().toISOString();
+    person = { id: `person-${crypto.randomUUID()}`, groupId: group.id, name, active: true, createdAt: now, updatedAt: now };
     state.data.people.push(person);
   }
   state.selectedPersonId = person.id;
@@ -665,7 +666,8 @@ function bindEvents() {
     if (!name) return;
     const group = currentGroup();
     rememberUndo();
-    const person = { id: `person-${crypto.randomUUID()}`, groupId: group.id, name, active: true };
+    const now = new Date().toISOString();
+    const person = { id: `person-${crypto.randomUUID()}`, groupId: group.id, name, active: true, createdAt: now, updatedAt: now };
     state.data.people.push(person);
     state.selectedPersonId = person.id;
     rememberDevicePerson(person, { committed: true });
