@@ -2,6 +2,21 @@ import { firebaseDatabaseUrl } from './firebaseConfig.js?v=2';
 import { getFirebaseAuthToken } from './firebaseAuth.js?v=2';
 
 const requestTimeoutMs = 10000;
+const maxTextLengths = {
+  personName: 120,
+  passageText: 8000,
+  normalizedPassage: 500,
+  takeaway: 4000,
+};
+
+class SyncRequestError extends Error {
+  constructor(message, { status = 0, detail = '' } = {}) {
+    super(message);
+    this.name = 'SyncRequestError';
+    this.status = status;
+    this.detail = detail;
+  }
+}
 
 function cleanDatabaseUrl(url) {
   return String(url || '').trim().replace(/\/+$/, '');
@@ -25,8 +40,17 @@ async function requestJson(url, options = {}) {
         ...(options.headers || {}),
       },
     });
-    if (!response.ok) throw new Error(`Sync failed (${response.status})`);
-    return response.json();
+    const text = await response.text();
+    if (!response.ok) {
+      let detail = text.trim();
+      try {
+        detail = JSON.parse(text).error || detail;
+      } catch {
+        // Keep the raw response text when Firebase does not return JSON.
+      }
+      throw new SyncRequestError(`Sync failed (${response.status})`, { status: response.status, detail });
+    }
+    return text ? JSON.parse(text) : null;
   } finally {
     globalThis.clearTimeout(timer);
   }
@@ -183,8 +207,45 @@ function needsSchemaWrite(remote, merged) {
   return remote?.schemaVersion !== 2 || remote?.hasLegacyCollections || !sameSnapshot(merged, remote);
 }
 
+function firstValidationIssue(data) {
+  for (const person of data?.people || []) {
+    if (String(person.name || '').length > maxTextLengths.personName) {
+      return `${person.name || 'A reader'} has a name over ${maxTextLengths.personName} characters.`;
+    }
+  }
+
+  for (const entry of data?.entries || []) {
+    const owner = entry.personName || 'One entry';
+    if (String(entry.personName || '').length > maxTextLengths.personName) {
+      return `${owner} has a reader name over ${maxTextLengths.personName} characters.`;
+    }
+    if (String(entry.passageText || '').length > maxTextLengths.passageText) {
+      return `${owner}'s scripture text is over ${maxTextLengths.passageText} characters.`;
+    }
+    if (String(entry.normalizedPassage || '').length > maxTextLengths.normalizedPassage) {
+      return `${owner}'s detected reference is too long.`;
+    }
+    if (String(entry.takeaway || '').length > maxTextLengths.takeaway) {
+      return `${owner}'s takeaway is over ${maxTextLengths.takeaway} characters.`;
+    }
+  }
+
+  return '';
+}
+
+function assertValidForSync(data) {
+  const issue = firstValidationIssue(data);
+  if (issue) throw new SyncRequestError(issue, { status: 0, detail: issue });
+}
+
 function syncErrorMessage(error, fallback) {
-  return error?.message === 'Firebase API key is missing' ? 'Auth setup needed' : fallback;
+  console.error('Daily Scripture sync error', error);
+  if (error?.message === 'Firebase API key is missing') return 'Auth setup needed';
+  if (error?.name === 'AbortError') return 'Sync timed out. Check connection.';
+  if (error?.status === 400) return `Sync blocked: ${error.detail || 'entry data rejected'}`;
+  if (error?.status === 401 || error?.status === 403) return 'Sync blocked: refresh app or sign-in failed.';
+  if (error?.detail) return `Sync blocked: ${error.detail}`;
+  return fallback;
 }
 
 export function createSyncStore({ getGroup, getPeople, getEntries, replaceGroupData, onStatus, onRemoteChange }) {
@@ -256,6 +317,7 @@ export function createSyncStore({ getGroup, getPeople, getEntries, replaceGroupD
         changed = true;
       }
       if (needsSchemaWrite(remote, merged)) {
+        assertValidForSync(merged);
         await requestJson(await syncUrl(), {
           method: 'PATCH',
           body: JSON.stringify(patchPayload(remote, merged)),
@@ -274,8 +336,10 @@ export function createSyncStore({ getGroup, getPeople, getEntries, replaceGroupD
     status({ mode: 'saving', message: 'Saving online...' });
     try {
       const local = snapshot();
+      assertValidForSync(local);
       const remote = merge ? normalizeSnapshot(await requestJson(await syncUrl()).catch(() => null)) : null;
       const data = merge ? mergeSnapshots(remote, local) : local;
+      assertValidForSync(data);
       await requestJson(await syncUrl(), {
         method: remote ? 'PATCH' : 'PUT',
         body: JSON.stringify(remote ? patchPayload(remote, data) : groupPayload(data)),

@@ -1,4 +1,4 @@
-import { createSyncStore } from './syncStore.js?v=12';
+import { createSyncStore } from './syncStore.js?v=13';
 import { bibleGatewayUrl, getPassageSuggestions, parsePassage } from './passageParser.js?v=4';
 
 const localKey = 'daily-scripture-local-v1';
@@ -380,7 +380,7 @@ function renderToday() {
             ? `<label class="new-person-field">
                 <span>Your Name (for future tracking)</span>
                 <div class="field-wrap">
-                  <input name="readerName" value="${escapeHtml(state.readerName)}" placeholder="e.g., Tom B." autocomplete="off" />
+                  <input name="readerName" value="${escapeHtml(state.readerName)}" maxlength="120" placeholder="e.g., Tom B." autocomplete="off" />
                 </div>
               </label>`
             : ''
