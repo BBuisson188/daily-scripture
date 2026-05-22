@@ -1,4 +1,4 @@
-import { createSyncStore } from './syncStore.js?v=13';
+import { createSyncStore } from './syncStore.js?v=14';
 import { bibleGatewayUrl, getPassageSuggestions, parsePassage } from './passageParser.js?v=4';
 
 const localKey = 'daily-scripture-local-v1';
@@ -6,6 +6,7 @@ const defaultGroupSlug = 'main';
 const app = document.getElementById('root');
 const dateFormatter = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 const passageMaxLength = 8000;
+const normalizedPassageMaxLength = 500;
 const takeawayMaxLength = 4000;
 
 const state = {
@@ -417,6 +418,22 @@ function renderToday() {
   `;
 }
 
+function syncablePassageData(passage) {
+  if (passage.status !== 'parsed' || passage.normalized.length > normalizedPassageMaxLength) {
+    return {
+      normalizedPassage: '',
+      parsedRanges: [],
+      verseCount: null,
+    };
+  }
+
+  return {
+    normalizedPassage: passage.normalized,
+    parsedRanges: passage.ranges,
+    verseCount: passage.verseCount,
+  };
+}
+
 function renderEntriesTab() {
   const dayEntries = entries()
     .filter((entry) => entry.entryDate === state.activeDate)
@@ -743,6 +760,7 @@ function bindEvents() {
     }
 
     const group = currentGroup();
+    const passageData = syncablePassageData(passage);
     const payload = {
       id: `${state.activeDate}_${person.id}`,
       groupId: group.id,
@@ -750,9 +768,9 @@ function bindEvents() {
       personName: person.name,
       entryDate: state.activeDate,
       passageText: state.passageText.trim(),
-      normalizedPassage: passage.status === 'parsed' ? passage.normalized : '',
-      parsedRanges: passage.ranges,
-      verseCount: passage.verseCount,
+      normalizedPassage: passageData.normalizedPassage,
+      parsedRanges: passageData.parsedRanges,
+      verseCount: passageData.verseCount,
       takeaway: state.takeaway.trim(),
       takeawayChars: state.takeaway.trim().length,
       updatedAt: new Date().toISOString(),

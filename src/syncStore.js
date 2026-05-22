@@ -223,7 +223,7 @@ function firstValidationIssue(data) {
       return `${owner}'s scripture text is over ${maxTextLengths.passageText} characters.`;
     }
     if (String(entry.normalizedPassage || '').length > maxTextLengths.normalizedPassage) {
-      return `${owner}'s detected reference is too long.`;
+      return `${owner}'s entry has older reference data. Edit and save it again.`;
     }
     if (String(entry.takeaway || '').length > maxTextLengths.takeaway) {
       return `${owner}'s takeaway is over ${maxTextLengths.takeaway} characters.`;
