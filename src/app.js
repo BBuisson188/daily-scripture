@@ -5,6 +5,8 @@ const localKey = 'daily-scripture-local-v1';
 const defaultGroupSlug = 'main';
 const app = document.getElementById('root');
 const dateFormatter = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+const passageMaxLength = 8000;
+const takeawayMaxLength = 4000;
 
 const state = {
   data: readLocal(),
@@ -387,8 +389,8 @@ function renderToday() {
         <label>
           <span>Scripture</span>
           <div class="field-wrap tall">
-            <textarea name="passage" rows="3" placeholder="Enter a scripture...">${escapeHtml(state.passageText)}</textarea>
-            <small>e.g., John 3:16-4:5</small>
+            <textarea name="passage" rows="3" maxlength="${passageMaxLength}" placeholder="Enter a scripture...">${escapeHtml(state.passageText)}</textarea>
+            <small>e.g., John 3:16-4:5, or paste the scripture text</small>
           </div>
         </label>
 
@@ -399,7 +401,7 @@ function renderToday() {
         <label>
           <span>Takeaway</span>
           <div class="field-wrap">
-            <textarea name="takeaway" rows="3" placeholder="What is God teaching you?">${escapeHtml(state.takeaway)}</textarea>
+            <textarea name="takeaway" rows="3" maxlength="${takeawayMaxLength}" placeholder="What is God teaching you?">${escapeHtml(state.takeaway)}</textarea>
           </div>
         </label>
 
@@ -718,6 +720,16 @@ function bindEvents() {
   app.querySelector('[data-entry-form]')?.addEventListener('submit', (event) => {
     event.preventDefault();
     const passage = parsePassage(state.passageText);
+    if (state.passageText.trim().length > passageMaxLength) {
+      state.error = 'Shorten the scripture text before saving.';
+      render();
+      return;
+    }
+    if (state.takeaway.trim().length > takeawayMaxLength) {
+      state.error = 'Shorten the takeaway before saving.';
+      render();
+      return;
+    }
     if (!state.passageText.trim() || !state.takeaway.trim()) {
       state.error = 'Add both a passage and a takeaway.';
       render();
@@ -738,7 +750,7 @@ function bindEvents() {
       personName: person.name,
       entryDate: state.activeDate,
       passageText: state.passageText.trim(),
-      normalizedPassage: passage.normalized,
+      normalizedPassage: passage.status === 'parsed' ? passage.normalized : '',
       parsedRanges: passage.ranges,
       verseCount: passage.verseCount,
       takeaway: state.takeaway.trim(),

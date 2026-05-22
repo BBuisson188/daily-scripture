@@ -68,7 +68,7 @@
               ".validate": "newData.isString() && newData.val().length == 10"
             },
             "passageText": {
-              ".validate": "newData.isString() && newData.val().length <= 500"
+              ".validate": "newData.isString() && newData.val().length <= 8000"
             },
             "normalizedPassage": {
               ".validate": "newData.isString() && newData.val().length <= 500"
